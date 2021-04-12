@@ -17,24 +17,28 @@ import (
 )
 
 type options struct {
-	Protocol           string
-	ListenAddr         string
-	TargetAddr4        string
-	TargetAddr6        string
-	Mark               int
-	Verbose            int
-	allowedSubnetsPath string
-	AllowedSubnets     []*net.IPNet
-	Listeners          int
-	Logger             *zap.Logger
-	udpCloseAfter      int
-	UDPCloseAfter      time.Duration
+	Protocol               string
+	ListenAddr             string
+	TargetAddr4            string
+	TargetAddr6            string
+	Fallback               bool
+	EnableTransparentProxy bool
+	Mark                   int
+	Verbose                int
+	allowedSubnetsPath     string
+	AllowedSubnets         []*net.IPNet
+	Listeners              int
+	Logger                 *zap.Logger
+	udpCloseAfter          int
+	UDPCloseAfter          time.Duration
 }
 
 var Opts options
 
 func init() {
 	flag.StringVar(&Opts.Protocol, "p", "tcp", "Protocol that will be proxied: tcp, udp")
+	flag.BoolVar(&Opts.Fallback, "fallback", true, "Whether to fallback when decode on decoding PROXY protocol failure")
+	flag.BoolVar(&Opts.EnableTransparentProxy, "t", true, "Whether to enable transparent proxy")
 	flag.StringVar(&Opts.ListenAddr, "l", "0.0.0.0:8443", "Address the proxy listens on")
 	flag.StringVar(&Opts.TargetAddr4, "4", "127.0.0.1:443", "Address to which IPv4 traffic will be forwarded to")
 	flag.StringVar(&Opts.TargetAddr6, "6", "[::1]:443", "Address to which IPv6 traffic will be forwarded to")

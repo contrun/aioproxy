@@ -44,29 +44,32 @@ func tcpHandleConnection(conn net.Conn, logger *zap.Logger) {
 		return
 	}
 
-	saddr, _, restBytes, err := PROXYReadRemoteAddr(buffer[:n], TCP)
+	ppi, restBytes, err := TryReadPROXYProtocol(buffer[:n], TCP)
 	if err != nil {
-		logger.Debug("failed to parse PROXY header", zap.Error(err), zap.Bool("dropConnection", true))
-		return
+		if !Opts.Fallback {
+			logger.Debug("failed to parse PROXY header", zap.Error(err), zap.Bool("dropConnection", true))
+			return
+		} else {
+			logger.Debug("packet treated as non-PROXY", zap.Error(err), zap.String("local address", conn.LocalAddr().String()), zap.String("remote address", conn.RemoteAddr().String()))
+		}
+	} else {
+		if Opts.Verbose > 1 {
+			logger.Debug("successfully parsed PROXY header")
+		}
 	}
 
-	targetAddr := Opts.TargetAddr6
-	if AddrVersion(saddr) == 4 {
-		targetAddr = Opts.TargetAddr4
+	targetAddr := GetTargetAddr(ppi, conn)
+
+	clientAddr := conn.RemoteAddr()
+	if ppi != nil {
+		clientAddr = ppi.SourceAddr
+		logger = logger.With(zap.String("clientAddr", clientAddr.String()), zap.String("targetAddr", targetAddr))
 	}
 
-	clientAddr := "UNKNOWN"
-	if saddr != nil {
-		clientAddr = saddr.String()
-	}
-	logger = logger.With(zap.String("clientAddr", clientAddr), zap.String("targetAddr", targetAddr))
-	if Opts.Verbose > 1 {
-		logger.Debug("successfully parsed PROXY header")
-	}
-
-	dialer := net.Dialer{LocalAddr: saddr}
-	if saddr != nil {
-		dialer.Control = DialUpstreamControl(saddr.(*net.TCPAddr).Port)
+	dialer := net.Dialer{}
+	if Opts.EnableTransparentProxy {
+		dialer.LocalAddr = clientAddr
+		dialer.Control = DialUpstreamControl(dialer.LocalAddr.(*net.TCPAddr).Port)
 	}
 	upstreamConn, err := dialer.Dial("tcp", targetAddr)
 	if err != nil {

@@ -12,6 +12,11 @@ import (
 	"strings"
 )
 
+type PROXYProtocolInfo struct {
+	SourceAddr      net.Addr
+	DestinationAddr net.Addr
+}
+
 func readRemoteAddrPROXYv2(ctrlBuf []byte, protocol Protocol) (net.Addr, net.Addr, []byte, error) {
 	if (ctrlBuf[12] >> 4) != 2 {
 		return nil, nil, nil, fmt.Errorf("unknown protocol version %d", ctrlBuf[12]>>4)
@@ -135,4 +140,15 @@ func PROXYReadRemoteAddr(buf []byte, protocol Protocol) (net.Addr, net.Addr, []b
 	}
 
 	return nil, nil, nil, fmt.Errorf("PROXY header missing")
+}
+
+func TryReadPROXYProtocol(buf []byte, protocol Protocol) (*PROXYProtocolInfo, []byte, error) {
+	saddr, daddr, restBytes, err := PROXYReadRemoteAddr(buf, protocol)
+	if err == nil {
+		return &PROXYProtocolInfo{
+			SourceAddr:      saddr,
+			DestinationAddr: daddr,
+		}, restBytes, err
+	}
+	return nil, buf, err
 }

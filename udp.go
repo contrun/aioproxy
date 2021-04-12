@@ -98,8 +98,9 @@ func udpGetSocketFromMap(downstream net.PacketConn, downstreamAddr, saddr net.Ad
 	}
 
 	logger = logger.With(zap.String("downstreamAddr", downstreamAddr.String()), zap.String("targetAddr", targetAddr))
-	dialer := net.Dialer{LocalAddr: saddr}
-	if saddr != nil {
+	dialer := net.Dialer{}
+	if Opts.EnableTransparentProxy {
+		dialer.LocalAddr = saddr
 		logger = logger.With(zap.String("clientAddr", saddr.String()))
 		dialer.Control = DialUpstreamControl(saddr.(*net.UDPAddr).Port)
 	}
@@ -158,10 +159,18 @@ func UDPListen(listenConfig *net.ListenConfig, logger *zap.Logger, errors chan<-
 			continue
 		}
 
-		saddr, _, restBytes, err := PROXYReadRemoteAddr(buffer[:n], UDP)
+		ppi, restBytes, err := TryReadPROXYProtocol(buffer[:n], UDP)
 		if err != nil {
-			logger.Debug("failed to parse PROXY header", zap.Error(err), zap.String("remoteAddr", remoteAddr.String()))
-			continue
+			if !Opts.Fallback {
+				logger.Debug("failed to parse PROXY header", zap.Error(err), zap.String("remoteAddr", remoteAddr.String()))
+				continue
+			} else {
+				logger.Debug("packet treated as non-PROXY", zap.Error(err), zap.String("local address", ln.LocalAddr().String()), zap.String("remote address", remoteAddr.String()))
+			}
+		}
+		saddr := remoteAddr
+		if ppi != nil {
+			saddr = ppi.SourceAddr
 		}
 
 		for {
