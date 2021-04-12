@@ -92,10 +92,7 @@ func udpGetSocketFromMap(downstream net.PacketConn, downstreamAddr, saddr net.Ad
 		return conn, nil
 	}
 
-	targetAddr := Opts.TargetAddr6
-	if AddrVersion(downstreamAddr) == 4 {
-		targetAddr = Opts.TargetAddr4
-	}
+	targetAddr := Opts.Upstream
 
 	logger = logger.With(zap.String("downstreamAddr", downstreamAddr.String()), zap.String("targetAddr", targetAddr))
 	dialer := net.Dialer{}

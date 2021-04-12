@@ -19,8 +19,7 @@ import (
 type options struct {
 	Protocol               string
 	ListenAddr             string
-	TargetAddr4            string
-	TargetAddr6            string
+	Upstream               string
 	Fallback               bool
 	EnableTransparentProxy bool
 	Mark                   int
@@ -40,8 +39,7 @@ func init() {
 	flag.BoolVar(&Opts.Fallback, "fallback", true, "Whether to fallback when decode on decoding PROXY protocol failure")
 	flag.BoolVar(&Opts.EnableTransparentProxy, "t", true, "Whether to enable transparent proxy")
 	flag.StringVar(&Opts.ListenAddr, "l", "0.0.0.0:8443", "Address the proxy listens on")
-	flag.StringVar(&Opts.TargetAddr4, "4", "127.0.0.1:443", "Address to which IPv4 traffic will be forwarded to")
-	flag.StringVar(&Opts.TargetAddr6, "6", "[::1]:443", "Address to which IPv6 traffic will be forwarded to")
+	flag.StringVar(&Opts.Upstream, "u", "127.0.0.1:443", "Upstream address to which traffic will be forwarded to")
 	flag.IntVar(&Opts.Mark, "mark", 0, "The mark that will be set on outbound packets")
 	flag.IntVar(&Opts.Verbose, "v", 0, `0 - no logging of individual connections
 1 - log errors occurring in individual connections

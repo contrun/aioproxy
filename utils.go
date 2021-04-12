@@ -7,7 +7,6 @@ package main
 import (
 	"fmt"
 	"net"
-	"strings"
 	"syscall"
 )
 
@@ -82,12 +81,4 @@ func DialUpstreamControl(sport int) func(string, string, syscall.RawConn) error 
 		}
 		return syscallErr
 	}
-}
-
-func AddrVersion(addr net.Addr) int {
-	// poor man's ipv6 check - golang makes it unnecessarily hard
-	if addr == nil || strings.ContainsRune(addr.String(), '.') {
-		return 4
-	}
-	return 6
 }
