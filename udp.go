@@ -94,7 +94,8 @@ func udpGetSocketFromMap(downstream net.PacketConn, downstreamAddr net.Addr, ppi
 		return conn, nil
 	}
 
-	targetAddr := Opts.Upstream
+	//TODO: Port multiplexing for udp
+	targetAddr := Opts.UpstreamAddr
 
 	logger = logger.With(zap.String("downstreamAddr", downstreamAddr.String()), zap.String("saddr", saddr.String()), zap.String("targetAddr", targetAddr))
 	dialer := net.Dialer{}

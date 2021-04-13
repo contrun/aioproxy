@@ -58,7 +58,7 @@ func tcpHandleConnection(conn net.Conn, logger *zap.Logger) {
 		}
 	}
 
-	targetAddr := GetTargetAddr(ppi, conn)
+	targetAddr := GetTargetAddr(conn, &ConnAuxInfo{ppi, restBytes}, logger)
 
 	clientAddr := conn.RemoteAddr()
 	if ppi != nil {

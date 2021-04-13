@@ -18,19 +18,24 @@ import (
 )
 
 type options struct {
-	Protocol               string
-	ListenAddr             arrayFlags
-	Upstream               string
-	Fallback               bool
-	EnableTransparentProxy bool
-	Mark                   int
-	Verbose                int
-	allowedSubnetsPath     string
-	AllowedSubnets         []*net.IPNet
-	Listeners              int
-	Logger                 *zap.Logger
-	udpCloseAfter          int
-	UDPCloseAfter          time.Duration
+	Protocol                    string
+	ListenAddr                  arrayFlags
+	UpstreamAddr                string
+	Fallback                    bool
+	EnableTransparentProxy      bool
+	Mark                        int
+	Verbose                     int
+	allowedSubnetsPath          string
+	AllowedSubnets              []*net.IPNet
+	Listeners                   int
+	ProtocolMatchers            []ProtocolMatcher
+	tlsUpstreamAddr             string
+	httpUpstreamAddr            string
+	sshUpstreamAddr             string
+	eternalTerminalUpstreamAddr string
+	Logger                      *zap.Logger
+	udpCloseAfter               int
+	UDPCloseAfter               time.Duration
 }
 
 type arrayFlags []string
@@ -54,7 +59,11 @@ func init() {
 	flag.BoolVar(&Opts.Fallback, "fallback", true, "Whether to fallback when decode on decoding PROXY protocol failure")
 	flag.BoolVar(&Opts.EnableTransparentProxy, "t", true, "Whether to enable transparent proxy")
 	flag.Var(&(Opts.ListenAddr), "l", "Address the proxy listens on")
-	flag.StringVar(&Opts.Upstream, "u", "127.0.0.1:443", "Upstream address to which traffic will be forwarded to")
+	flag.StringVar(&Opts.UpstreamAddr, "u", "127.0.0.1:443", "UpstreamAddr address to which traffic will be forwarded to")
+	flag.StringVar(&Opts.httpUpstreamAddr, "http", "", "UpstreamAddr address to which http traffic will be forwarded to")
+	flag.StringVar(&Opts.tlsUpstreamAddr, "tls", "", "UpstreamAddr address to which tls traffic will be forwarded to")
+	flag.StringVar(&Opts.sshUpstreamAddr, "ssh", "", "UpstreamAddr address to which ssh traffic will be forwarded to")
+	flag.StringVar(&Opts.eternalTerminalUpstreamAddr, "eternal-terminal", "", "UpstreamAddr address to which eternal terminal traffic will be forwarded to")
 	flag.IntVar(&Opts.Mark, "mark", 0, "The mark that will be set on outbound packets")
 	flag.IntVar(&Opts.Verbose, "v", 0, `0 - no logging of individual connections
 1 - log errors occurring in individual connections
@@ -134,6 +143,26 @@ func main() {
 		log.Fatalf("Failed to initialize logging: %s", err.Error())
 	}
 	defer Opts.Logger.Sync()
+
+	if Opts.tlsUpstreamAddr != "" {
+		Opts.Logger.Debug("added tls forwarder", zap.String("upstreamAddr", Opts.tlsUpstreamAddr))
+		Opts.ProtocolMatchers = append(Opts.ProtocolMatchers, NewTLSMatcher(Opts.tlsUpstreamAddr))
+	}
+
+	if Opts.httpUpstreamAddr != "" {
+		Opts.Logger.Debug("added http forwarder", zap.String("upstreamAddr", Opts.httpUpstreamAddr))
+		Opts.ProtocolMatchers = append(Opts.ProtocolMatchers, NewHTTPMatcher(Opts.httpUpstreamAddr))
+	}
+
+	if Opts.sshUpstreamAddr != "" {
+		Opts.Logger.Debug("added ssh forwarder", zap.String("upstreamAddr", Opts.sshUpstreamAddr))
+		Opts.ProtocolMatchers = append(Opts.ProtocolMatchers, NewSSHMatcher(Opts.sshUpstreamAddr))
+	}
+
+	if Opts.eternalTerminalUpstreamAddr != "" {
+		Opts.Logger.Debug("added eternalTerminal forwarder", zap.String("upstreamAddr", Opts.eternalTerminalUpstreamAddr))
+		Opts.ProtocolMatchers = append(Opts.ProtocolMatchers, NewEternalTerminalMatcher(Opts.eternalTerminalUpstreamAddr))
+	}
 
 	if Opts.allowedSubnetsPath != "" {
 		if err := loadAllowedSubnets(); err != nil {
