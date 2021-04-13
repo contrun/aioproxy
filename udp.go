@@ -81,11 +81,13 @@ func udpCopyFromUpstream(downstream net.PacketConn, conn *udpConnection) {
 	}
 }
 
-func udpGetSocketFromMap(downstream net.PacketConn, downstreamAddr, saddr net.Addr, logger *zap.Logger,
+func udpGetSocketFromMap(downstream net.PacketConn, downstreamAddr net.Addr, ppi *PROXYProtocolInfo, logger *zap.Logger,
 	connMap map[string]*udpConnection, socketClosures chan<- string) (*udpConnection, error) {
+	saddr := downstreamAddr
 	connKey := ""
-	if saddr != nil {
-		connKey = saddr.String()
+	if ppi != nil {
+		connKey = ppi.SourceAddr.String()
+		saddr = ppi.SourceAddr
 	}
 	if conn := connMap[connKey]; conn != nil {
 		atomic.AddInt64(conn.lastActivity, 1)
@@ -94,7 +96,7 @@ func udpGetSocketFromMap(downstream net.PacketConn, downstreamAddr, saddr net.Ad
 
 	targetAddr := Opts.Upstream
 
-	logger = logger.With(zap.String("downstreamAddr", downstreamAddr.String()), zap.String("targetAddr", targetAddr))
+	logger = logger.With(zap.String("downstreamAddr", downstreamAddr.String()), zap.String("saddr", saddr.String()), zap.String("targetAddr", targetAddr))
 	dialer := net.Dialer{}
 	if Opts.EnableTransparentProxy {
 		dialer.LocalAddr = saddr
@@ -127,9 +129,9 @@ func udpGetSocketFromMap(downstream net.PacketConn, downstreamAddr, saddr net.Ad
 	return udpConn, nil
 }
 
-func UDPListen(listenConfig *net.ListenConfig, logger *zap.Logger, errors chan<- error) {
+func UDPListen(listenConfig *net.ListenConfig, listenAddr string, logger *zap.Logger, errors chan<- error) {
 	ctx := context.Background()
-	ln, err := listenConfig.ListenPacket(ctx, "udp", Opts.ListenAddr)
+	ln, err := listenConfig.ListenPacket(ctx, "udp", listenAddr)
 	if err != nil {
 		logger.Error("failed to bind listener", zap.Error(err))
 		errors <- err
@@ -165,10 +167,6 @@ func UDPListen(listenConfig *net.ListenConfig, logger *zap.Logger, errors chan<-
 				logger.Debug("packet treated as non-PROXY", zap.Error(err), zap.String("local address", ln.LocalAddr().String()), zap.String("remote address", remoteAddr.String()))
 			}
 		}
-		saddr := remoteAddr
-		if ppi != nil {
-			saddr = ppi.SourceAddr
-		}
 
 		for {
 			doneClosing := false
@@ -183,7 +181,7 @@ func UDPListen(listenConfig *net.ListenConfig, logger *zap.Logger, errors chan<-
 			}
 		}
 
-		conn, err := udpGetSocketFromMap(ln, remoteAddr, saddr, logger, connectionMap, socketClosures)
+		conn, err := udpGetSocketFromMap(ln, remoteAddr, ppi, logger, connectionMap, socketClosures)
 		if err != nil {
 			continue
 		}

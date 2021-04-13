@@ -119,9 +119,9 @@ func tcpHandleConnection(conn net.Conn, logger *zap.Logger) {
 	}
 }
 
-func TCPListen(listenConfig *net.ListenConfig, logger *zap.Logger, errors chan<- error) {
+func TCPListen(listenConfig *net.ListenConfig, listenAddr string, logger *zap.Logger, errors chan<- error) {
 	ctx := context.Background()
-	ln, err := listenConfig.Listen(ctx, "tcp", Opts.ListenAddr)
+	ln, err := listenConfig.Listen(ctx, "tcp", listenAddr)
 	if err != nil {
 		logger.Error("failed to bind listener", zap.Error(err))
 		errors <- err

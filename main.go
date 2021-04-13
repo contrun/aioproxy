@@ -7,6 +7,7 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -18,7 +19,7 @@ import (
 
 type options struct {
 	Protocol               string
-	ListenAddr             string
+	ListenAddr             arrayFlags
 	Upstream               string
 	Fallback               bool
 	EnableTransparentProxy bool
@@ -32,13 +33,27 @@ type options struct {
 	UDPCloseAfter          time.Duration
 }
 
+type arrayFlags []string
+
+func (i *arrayFlags) String() string {
+	if i == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%+q", *i)
+}
+
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
 var Opts options
 
 func init() {
-	flag.StringVar(&Opts.Protocol, "p", "tcp", "Protocol that will be proxied: tcp, udp")
+	flag.StringVar(&Opts.Protocol, "p", "tcp", "Protocol that will be proxied: tcp, udp, both")
 	flag.BoolVar(&Opts.Fallback, "fallback", true, "Whether to fallback when decode on decoding PROXY protocol failure")
 	flag.BoolVar(&Opts.EnableTransparentProxy, "t", true, "Whether to enable transparent proxy")
-	flag.StringVar(&Opts.ListenAddr, "l", "0.0.0.0:8443", "Address the proxy listens on")
+	flag.Var(&(Opts.ListenAddr), "l", "Address the proxy listens on")
 	flag.StringVar(&Opts.Upstream, "u", "127.0.0.1:443", "Upstream address to which traffic will be forwarded to")
 	flag.IntVar(&Opts.Mark, "mark", 0, "The mark that will be set on outbound packets")
 	flag.IntVar(&Opts.Verbose, "v", 0, `0 - no logging of individual connections
@@ -53,7 +68,7 @@ func init() {
 
 func listen(listenerNum int, errors chan<- error) {
 	logger := Opts.Logger.With(zap.Int("listenerNum", listenerNum),
-		zap.String("protocol", Opts.Protocol), zap.String("listenAdr", Opts.ListenAddr))
+		zap.String("protocol", Opts.Protocol), zap.Stringer("listenAdr", &Opts.ListenAddr))
 
 	listenConfig := net.ListenConfig{}
 	if Opts.Listeners > 1 {
@@ -67,10 +82,15 @@ func listen(listenerNum int, errors chan<- error) {
 		}
 	}
 
-	if Opts.Protocol == "tcp" {
-		TCPListen(&listenConfig, logger, errors)
-	} else {
-		UDPListen(&listenConfig, logger, errors)
+	for _, addr := range Opts.ListenAddr {
+		if Opts.Protocol == "tcp" {
+			go TCPListen(&listenConfig, addr, logger, errors)
+		} else if Opts.Protocol == "udp" {
+			go UDPListen(&listenConfig, addr, logger, errors)
+		} else {
+			go TCPListen(&listenConfig, addr, logger, errors)
+			go UDPListen(&listenConfig, addr, logger, errors)
+		}
 	}
 }
 
@@ -122,8 +142,12 @@ func main() {
 		}
 	}
 
-	if Opts.Protocol != "tcp" && Opts.Protocol != "udp" {
-		Opts.Logger.Fatal("--protocol has to be one of udp, tcp", zap.String("protocol", Opts.Protocol))
+	if Opts.Protocol != "tcp" && Opts.Protocol != "udp" && Opts.Protocol != "both" {
+		Opts.Logger.Fatal("--protocol has to be one of udp, tcp, both", zap.String("protocol", Opts.Protocol))
+	}
+
+	if len(Opts.ListenAddr) == 0 {
+		Opts.Logger.Fatal("-l not specifed, no listening port")
 	}
 
 	if Opts.Mark < 0 {
