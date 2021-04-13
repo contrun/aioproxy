@@ -22,12 +22,28 @@ const (
 type ConnAuxInfo struct {
 	ppi          *PROXYProtocolInfo
 	initialBytes []byte
+	connRemoteAddr net.Addr
+}
+
+func (auxInfo *ConnAuxInfo) GetUpstreamDialer() net.Dialer {
+	clientAddr := auxInfo.connRemoteAddr
+	if auxInfo.ppi != nil {
+		clientAddr = auxInfo.ppi.SourceAddr
+	}
+
+	dialer := net.Dialer{}
+	if Opts.EnableTransparentProxy {
+		dialer.LocalAddr = clientAddr
+		dialer.Control = DialUpstreamControl(dialer.LocalAddr.(*net.TCPAddr).Port)
+	}
+	return dialer
 }
 
 type ProtocolMatcher interface {
 	Name() string
 	UpstreamAddr() string
-	Match(conn net.Conn, auxInfo *ConnAuxInfo) ProtocolMatchResult
+	TcpMatch(conn net.Conn, auxInfo *ConnAuxInfo) ProtocolMatchResult
+	UdpMatch(conn net.PacketConn, auxInfo *ConnAuxInfo) ProtocolMatchResult
 }
 
 type RegexMatcher struct {
@@ -52,7 +68,7 @@ func (m *RegexMatcher) UpstreamAddr() string {
 	return m.upstreamAddr
 }
 
-func (m *RegexMatcher) Match(conn net.Conn, auxInfo *ConnAuxInfo) ProtocolMatchResult {
+func (m *RegexMatcher) TcpMatch(conn net.Conn, auxInfo *ConnAuxInfo) ProtocolMatchResult {
 	if m.matcher.numRequiredBytes > len(auxInfo.initialBytes) {
 		//TODO: Here we should read from conn again, and assign the result back to auxInfo
 		return ProtocolMatchUnspecified
@@ -66,6 +82,10 @@ func (m *RegexMatcher) Match(conn net.Conn, auxInfo *ConnAuxInfo) ProtocolMatchR
 	return ProtocolNotMatched
 }
 
+//TODO: Port multiplexing for udp
+func (m *RegexMatcher) UdpMatch(conn net.PacketConn, auxInfo *ConnAuxInfo) ProtocolMatchResult {
+	return ProtocolNotMatched
+}
 func sameBytes(bytes []byte) []byte {
 	return bytes
 }
@@ -143,10 +163,10 @@ func NewEternalTerminalMatcher(upstreamAddr string) *RegexMatcher {
 	}
 }
 
-func GetTargetAddr(conn net.Conn, auxInfo *ConnAuxInfo, logger *zap.Logger) string {
+func tcpGetTargetAddr(conn net.Conn, auxInfo *ConnAuxInfo, logger *zap.Logger) string {
 	targetAddr := Opts.UpstreamAddr
 	for _, matcher := range Opts.ProtocolMatchers {
-		if matcher.Match(conn, auxInfo) == ProtocolMatched {
+		if matcher.TcpMatch(conn, auxInfo) == ProtocolMatched {
 			logger.Debug("Successfully matched packet", zap.String("matcher.Name()", matcher.Name()), zap.String("matcher.UpstreamAddr()", matcher.UpstreamAddr()))
 			targetAddr = matcher.UpstreamAddr()
 			break
@@ -154,4 +174,29 @@ func GetTargetAddr(conn net.Conn, auxInfo *ConnAuxInfo, logger *zap.Logger) stri
 	}
 	logger.Debug("No matcher the packet, using default upstream addr", zap.String("Opts.UpstreamAddr)", Opts.UpstreamAddr))
 	return targetAddr
+}
+
+func tcpGetUpstreamConn(conn net.Conn, auxInfo *ConnAuxInfo, logger *zap.Logger) (net.Conn, error) {
+	targetAddr := tcpGetTargetAddr(conn, auxInfo, logger)
+	dialer := auxInfo.GetUpstreamDialer()
+	return dialer.Dial("tcp", targetAddr)
+}
+
+func udpGetTargetAddr(conn net.PacketConn, auxInfo *ConnAuxInfo, logger *zap.Logger) string {
+	targetAddr := Opts.UpstreamAddr
+	for _, matcher := range Opts.ProtocolMatchers {
+		if matcher.UdpMatch(conn, auxInfo) == ProtocolMatched {
+			logger.Debug("Successfully matched packet", zap.String("matcher.Name()", matcher.Name()), zap.String("matcher.UpstreamAddr()", matcher.UpstreamAddr()))
+			targetAddr = matcher.UpstreamAddr()
+			break
+		}
+	}
+	logger.Debug("No matcher the packet, using default upstream addr", zap.String("Opts.UpstreamAddr)", Opts.UpstreamAddr))
+	return targetAddr
+}
+
+func udpGetUpstreamConn(conn net.PacketConn, auxInfo *ConnAuxInfo, logger *zap.Logger) (net.Conn, error) {
+	targetAddr := udpGetTargetAddr(conn, auxInfo, logger)
+	dialer := auxInfo.GetUpstreamDialer()
+	return dialer.Dial("udp", targetAddr)
 }

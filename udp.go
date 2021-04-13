@@ -81,35 +81,18 @@ func udpCopyFromUpstream(downstream net.PacketConn, conn *udpConnection) {
 	}
 }
 
-func udpGetSocketFromMap(downstream net.PacketConn, downstreamAddr net.Addr, ppi *PROXYProtocolInfo, logger *zap.Logger,
+func udpGetSocketFromMap(downstream net.PacketConn, auxInfo *ConnAuxInfo, logger *zap.Logger,
 	connMap map[string]*udpConnection, socketClosures chan<- string) (*udpConnection, error) {
-	saddr := downstreamAddr
 	connKey := ""
-	if ppi != nil {
-		connKey = ppi.SourceAddr.String()
-		saddr = ppi.SourceAddr
+	if auxInfo.ppi != nil {
+		connKey = auxInfo.ppi.SourceAddr.String()
 	}
 	if conn := connMap[connKey]; conn != nil {
 		atomic.AddInt64(conn.lastActivity, 1)
 		return conn, nil
 	}
 
-	//TODO: Port multiplexing for udp
-	targetAddr := Opts.UpstreamAddr
-
-	logger = logger.With(zap.String("downstreamAddr", downstreamAddr.String()), zap.String("saddr", saddr.String()), zap.String("targetAddr", targetAddr))
-	dialer := net.Dialer{}
-	if Opts.EnableTransparentProxy {
-		dialer.LocalAddr = saddr
-		logger = logger.With(zap.String("clientAddr", saddr.String()))
-		dialer.Control = DialUpstreamControl(saddr.(*net.UDPAddr).Port)
-	}
-
-	if Opts.Verbose > 1 {
-		logger.Debug("new connection")
-	}
-
-	conn, err := dialer.Dial("udp", targetAddr)
+	conn, err := udpGetUpstreamConn(downstream, auxInfo, logger)
 	if err != nil {
 		logger.Debug("failed to connect to upstream", zap.Error(err))
 		return nil, err
@@ -118,10 +101,12 @@ func udpGetSocketFromMap(downstream net.PacketConn, downstreamAddr net.Addr, ppi
 	udpConn := &udpConnection{upstream: conn.(*net.UDPConn),
 		logger:         logger,
 		lastActivity:   new(int64),
-		downstreamAddr: downstreamAddr.(*net.UDPAddr)}
-	if saddr != nil {
-		udpConn.clientAddr = saddr.(*net.UDPAddr)
+		downstreamAddr: auxInfo.connRemoteAddr.(*net.UDPAddr)}
+	saddr := auxInfo.connRemoteAddr
+	if auxInfo.ppi != nil {
+		saddr = auxInfo.ppi.SourceAddr
 	}
+	udpConn.clientAddr = saddr.(*net.UDPAddr)
 
 	go udpCopyFromUpstream(downstream, udpConn)
 	go udpCloseAfterInactivity(udpConn, socketClosures)
@@ -182,7 +167,8 @@ func UDPListen(listenConfig *net.ListenConfig, listenAddr string, logger *zap.Lo
 			}
 		}
 
-		conn, err := udpGetSocketFromMap(ln, remoteAddr, ppi, logger, connectionMap, socketClosures)
+		auxInfo := &ConnAuxInfo{ppi, restBytes, remoteAddr}
+		conn, err := udpGetSocketFromMap(ln, auxInfo, logger, connectionMap, socketClosures)
 		if err != nil {
 			continue
 		}

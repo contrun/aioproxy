@@ -58,25 +58,11 @@ func tcpHandleConnection(conn net.Conn, logger *zap.Logger) {
 		}
 	}
 
-	targetAddr := GetTargetAddr(conn, &ConnAuxInfo{ppi, restBytes}, logger)
-
-	clientAddr := conn.RemoteAddr()
-	if ppi != nil {
-		clientAddr = ppi.SourceAddr
-		logger = logger.With(zap.String("clientAddr", clientAddr.String()), zap.String("targetAddr", targetAddr))
-	}
-
-	dialer := net.Dialer{}
-	if Opts.EnableTransparentProxy {
-		dialer.LocalAddr = clientAddr
-		dialer.Control = DialUpstreamControl(dialer.LocalAddr.(*net.TCPAddr).Port)
-	}
-	upstreamConn, err := dialer.Dial("tcp", targetAddr)
+	upstreamConn, err := tcpGetUpstreamConn(conn, &ConnAuxInfo{ppi, restBytes, conn.RemoteAddr()}, logger)
 	if err != nil {
 		logger.Debug("failed to establish upstream connection", zap.Error(err), zap.Bool("dropConnection", true))
 		return
 	}
-
 	defer upstreamConn.Close()
 	if Opts.Verbose > 1 {
 		logger.Debug("successfully established upstream connection")
