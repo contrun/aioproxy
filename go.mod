@@ -1,4 +1,4 @@
-module github.com/path-network/go-mmproxy
+module github.com/contrun/aioproxy
 
 go 1.14
 
