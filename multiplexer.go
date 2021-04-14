@@ -164,16 +164,14 @@ func NewEternalTerminalMatcher(upstreamAddr string) *RegexMatcher {
 }
 
 func tcpGetTargetAddr(conn net.Conn, auxInfo *ConnAuxInfo, logger *zap.Logger) string {
-	targetAddr := Opts.UpstreamAddr
 	for _, matcher := range Opts.ProtocolMatchers {
 		if matcher.TcpMatch(conn, auxInfo) == ProtocolMatched {
 			logger.Debug("Successfully matched packet", zap.String("matcher.Name()", matcher.Name()), zap.String("matcher.UpstreamAddr()", matcher.UpstreamAddr()))
-			targetAddr = matcher.UpstreamAddr()
-			break
+			return matcher.UpstreamAddr()
 		}
 	}
 	logger.Debug("No matcher the packet, using default upstream addr", zap.String("Opts.UpstreamAddr)", Opts.UpstreamAddr))
-	return targetAddr
+	return Opts.UpstreamAddr
 }
 
 func tcpGetUpstreamConn(conn net.Conn, auxInfo *ConnAuxInfo, logger *zap.Logger) (net.Conn, error) {
@@ -183,16 +181,14 @@ func tcpGetUpstreamConn(conn net.Conn, auxInfo *ConnAuxInfo, logger *zap.Logger)
 }
 
 func udpGetTargetAddr(conn net.PacketConn, auxInfo *ConnAuxInfo, logger *zap.Logger) string {
-	targetAddr := Opts.UpstreamAddr
 	for _, matcher := range Opts.ProtocolMatchers {
 		if matcher.UdpMatch(conn, auxInfo) == ProtocolMatched {
 			logger.Debug("Successfully matched packet", zap.String("matcher.Name()", matcher.Name()), zap.String("matcher.UpstreamAddr()", matcher.UpstreamAddr()))
-			targetAddr = matcher.UpstreamAddr()
-			break
+			return matcher.UpstreamAddr()
 		}
 	}
 	logger.Debug("No matcher the packet, using default upstream addr", zap.String("Opts.UpstreamAddr)", Opts.UpstreamAddr))
-	return targetAddr
+	return Opts.UpstreamAddr
 }
 
 func udpGetUpstreamConn(conn net.PacketConn, auxInfo *ConnAuxInfo, logger *zap.Logger) (net.Conn, error) {
