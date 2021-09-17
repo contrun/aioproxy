@@ -32,9 +32,9 @@ func (auxInfo *ConnAuxInfo) GetUpstreamDialer() net.Dialer {
 	}
 
 	dialer := net.Dialer{}
-	if Opts.EnableTransparentProxy {
+	if Opts.EnableTransparentProxy && ShouldEnableTransparentMode(clientAddr) {
 		dialer.LocalAddr = clientAddr
-		dialer.Control = DialUpstreamControl(dialer.LocalAddr.(*net.TCPAddr).Port)
+		dialer.Control = DialUpstreamControl(GetPortFromAddr(dialer.LocalAddr))
 	}
 	return dialer
 }

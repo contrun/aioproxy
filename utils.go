@@ -30,6 +30,46 @@ func CheckOriginAllowed(remoteIP net.IP) bool {
 	return false
 }
 
+func GetIPFromAddr(addr net.Addr) net.IP {
+	switch a := addr.(type) {
+	case *net.TCPAddr:
+		return a.IP
+	case *net.UDPAddr:
+		return a.IP
+	default:
+		panic(fmt.Errorf("Unexpected address: %s", addr))
+	}
+}
+
+func GetPortFromAddr(addr net.Addr) int {
+	switch a := addr.(type) {
+	case *net.TCPAddr:
+		return a.Port
+	case *net.UDPAddr:
+		return a.Port
+	default:
+		panic(fmt.Errorf("Unexpected address: %s", addr))
+	}
+}
+
+func ShouldEnableTransparentMode(clientAddr net.Addr) bool {
+	clientIP := GetIPFromAddr(clientAddr)
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, addr := range addrs {
+		a, ok := addr.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		if a.IP.Equal(clientIP) {
+			return false
+		}
+	}
+	return true
+}
+
 func DialUpstreamControl(sport int) func(string, string, syscall.RawConn) error {
 	return func(network, address string, c syscall.RawConn) error {
 		var syscallErr error
