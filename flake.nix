@@ -13,9 +13,10 @@
         let
           pkgs = import nixpkgs {
             inherit system;
-            overlays = [ gomod2nix.overlay ];
+            overlays = [ (import "${gomod2nix}/overlay.nix") ];
           };
-        in {
+        in
+        {
 
           devShell = pkgs.mkShell { buildInputs = with pkgs; [ go ]; };
 
@@ -31,6 +32,7 @@
             flake-utils.lib.mkApp { drv = self.defaultPackage."${system}"; };
 
         };
-    in with flake-utils.lib; eachSystem defaultSystems out;
+    in
+    with flake-utils.lib; eachSystem defaultSystems out;
 
 }
